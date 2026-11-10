@@ -269,6 +269,20 @@
           <span>Запускать свёрнутым в трей</span>
           <input type="checkbox" id="trayMode" class="switch"><i></i>
         </label>
+
+        <div class="row-form mode-row">
+          <label for="connectionMode" class="mode-label">Режим</label>
+          <select id="connectionMode">
+            <option value="proxy">Прокси (системный HTTP/SOCKS)</option>
+            <option value="tun">Xray TUN (виртуальный адаптер — все приложения)</option>
+          </select>
+        </div>
+        <p class="muted small mode-hint" id="modeHint">Прокси: работает только с приложениями, которые уважают системный прокси (браузеры).</p>
+
+        <label class="switch-row">
+          <span>Использовать локальный DNS</span>
+          <input type="checkbox" id="localDNS" class="switch"><i></i>
+        </label>
       </div>
 
       <div class="panel">

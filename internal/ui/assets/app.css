@@ -1329,3 +1329,33 @@ body[data-bg="video"] .bg-grid { opacity: 0 !important; }
   background: var(--bg);
 }
 .bg-opt-name { font-size: 10px; }
+
+/* ═══════════════════════════════════════════════════════════════
+   CONNECTION MODE dropdown + Local DNS
+   ═══════════════════════════════════════════════════════════════ */
+.mode-row {
+  align-items: center;
+  margin-top: 14px;
+}
+.mode-label {
+  font: 600 10px var(--font-mono);
+  color: var(--fg-3);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  flex: 0 0 56px;
+}
+.mode-row select {
+  flex: 1;
+  padding: 8px 10px;
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  color: var(--fg);
+  font: 500 12px var(--font);
+  cursor: pointer;
+}
+.mode-row select:focus { border-color: var(--line-3); }
+.mode-hint {
+  margin-top: 8px;
+  line-height: 1.5;
+}

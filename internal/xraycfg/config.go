@@ -20,7 +20,7 @@ const (
 
 // Options tunes the generated configuration.
 type Options struct {
-        // SocksPort and HTTPPort are the local inbound ports.
+        // SocksPort and HTTPPort are the local inbound ports (proxy mode only).
         SocksPort int
         HTTPPort  int
         // BypassRU routes Russian domains and IPs directly instead of through the
@@ -29,6 +29,14 @@ type Options struct {
         // GeoAssets reports whether geoip.dat / geosite.dat are available. When
         // they are, the bypass rules use the full geosite/geoip data set.
         GeoAssets bool
+        // ConnectionMode is "proxy" (default) or "tun".
+        // "proxy" — local SOCKS+HTTP inbounds, app sets system proxy.
+        // "tun"   — Xray creates a wintun virtual adapter that captures all
+        //           system traffic. Requires admin on Windows.
+        ConnectionMode string
+        // LocalDNS makes Xray use the local DNS server for resolution rather
+        // than proxying DNS through the tunnel.
+        LocalDNS bool
 }
 
 func (o Options) withDefaults() Options {
@@ -37,6 +45,9 @@ func (o Options) withDefaults() Options {
         }
         if o.HTTPPort == 0 {
                 o.HTTPPort = DefaultHTTPPort
+        }
+        if o.ConnectionMode == "" {
+                o.ConnectionMode = "proxy"
         }
         return o
 }
@@ -50,35 +61,10 @@ func Build(spec *links.ServerSpec, opts Options) ([]byte, error) {
                 return nil, err
         }
 
-        sniff := map[string]any{
-                "enabled":      true,
-                "destOverride": []string{"http", "tls", "quic"},
-                "routeOnly":    true,
-        }
-
         cfg := map[string]any{
-                "log": map[string]any{"loglevel": "warning"},
-                "dns": map[string]any{
-                        "servers": []string{"1.1.1.1", "8.8.8.8"},
-                },
-                "inbounds": []any{
-                        map[string]any{
-                                "tag":      "socks",
-                                "listen":   "127.0.0.1",
-                                "port":     opts.SocksPort,
-                                "protocol": "socks",
-                                "settings": map[string]any{"auth": "noauth", "udp": true},
-                                "sniffing": sniff,
-                        },
-                        map[string]any{
-                                "tag":      "http",
-                                "listen":   "127.0.0.1",
-                                "port":     opts.HTTPPort,
-                                "protocol": "http",
-                                "settings": map[string]any{},
-                                "sniffing": sniff,
-                        },
-                },
+                "log":      map[string]any{"loglevel": "warning"},
+                "dns":      dnsConfig(opts),
+                "inbounds": inbounds(opts),
                 "outbounds": []any{
                         proxy,
                         map[string]any{"tag": "direct", "protocol": "freedom"},
@@ -104,35 +90,10 @@ func BuildFromOutbound(raw []byte, opts Options) ([]byte, error) {
         }
         ob["tag"] = "proxy"
 
-        sniff := map[string]any{
-                "enabled":      true,
-                "destOverride": []string{"http", "tls", "quic"},
-                "routeOnly":    true,
-        }
-
         cfg := map[string]any{
-                "log": map[string]any{"loglevel": "warning"},
-                "dns": map[string]any{
-                        "servers": []string{"1.1.1.1", "8.8.8.8"},
-                },
-                "inbounds": []any{
-                        map[string]any{
-                                "tag":      "socks",
-                                "listen":   "127.0.0.1",
-                                "port":     opts.SocksPort,
-                                "protocol": "socks",
-                                "settings": map[string]any{"auth": "noauth", "udp": true},
-                                "sniffing": sniff,
-                        },
-                        map[string]any{
-                                "tag":      "http",
-                                "listen":   "127.0.0.1",
-                                "port":     opts.HTTPPort,
-                                "protocol": "http",
-                                "settings": map[string]any{},
-                                "sniffing": sniff,
-                        },
-                },
+                "log":      map[string]any{"loglevel": "warning"},
+                "dns":      dnsConfig(opts),
+                "inbounds": inbounds(opts),
                 "outbounds": []any{
                         ob,
                         map[string]any{"tag": "direct", "protocol": "freedom"},
@@ -145,6 +106,64 @@ func BuildFromOutbound(raw []byte, opts Options) ([]byte, error) {
         }
 
         return json.MarshalIndent(cfg, "", "  ")
+}
+
+// inbounds returns the local inbounds for the chosen connection mode.
+// proxy mode → SOCKS + HTTP inbounds on the loopback interface.
+// tun mode   → a single TUN inbound that creates a wintun adapter and
+//              captures all system traffic (requires admin on Windows).
+func inbounds(opts Options) []any {
+        sniff := map[string]any{
+                "enabled":      true,
+                "destOverride": []string{"http", "tls", "quic"},
+                "routeOnly":    true,
+        }
+        if opts.ConnectionMode == "tun" {
+                return []any{
+                        map[string]any{
+                                "tag":      "tun",
+                                "protocol": "tun",
+                                "settings": map[string]any{
+                                        "interfaceName": "zaivpn0",
+                                        "ip":            "172.19.0.1:30",
+                                        "mtu":           1500,
+                                },
+                                "sniffing": sniff,
+                        },
+                }
+        }
+        return []any{
+                map[string]any{
+                        "tag":      "socks",
+                        "listen":   "127.0.0.1",
+                        "port":     opts.SocksPort,
+                        "protocol": "socks",
+                        "settings": map[string]any{"auth": "noauth", "udp": true},
+                        "sniffing": sniff,
+                },
+                map[string]any{
+                        "tag":      "http",
+                        "listen":   "127.0.0.1",
+                        "port":     opts.HTTPPort,
+                        "protocol": "http",
+                        "settings": map[string]any{},
+                        "sniffing": sniff,
+                },
+        }
+}
+
+// dnsConfig returns the DNS section of the config. When LocalDNS is true,
+// the system resolver is used (lower latency, but may leak DNS queries).
+func dnsConfig(opts Options) map[string]any {
+        if opts.LocalDNS {
+                return map[string]any{
+                        "servers":  []string{"localhost"},
+                        "queryStrategy": "UseIP",
+                }
+        }
+        return map[string]any{
+                "servers": []string{"1.1.1.1", "8.8.8.8"},
+        }
 }
 
 func routingRules(opts Options) []any {

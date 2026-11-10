@@ -377,6 +377,9 @@ function renderSettings() {
   $('sysProxy').checked = !!st.sysProxy;
   $('checkIP').checked = !!st.checkIP;
   $('trayMode').checked = !!st.trayMode;
+  $('localDNS').checked = !!st.localDNS;
+  $('connectionMode').value = st.connectionMode || 'proxy';
+  updateModeHint(st.connectionMode || 'proxy');
 
   const box = $('subList');
   box.textContent = '';
@@ -609,14 +612,26 @@ async function boot() {
     toast(r.message || 'Импортировано');
   };
 
-  for (const key of ['bypassRU', 'sysProxy', 'checkIP', 'trayMode']) {
+  for (const key of ['bypassRU', 'sysProxy', 'checkIP', 'trayMode', 'localDNS']) {
     $(key).onchange = async () => {
       const body = {};
-      for (const k of ['bypassRU', 'sysProxy', 'checkIP', 'trayMode']) body[k] = $(k).checked;
+      for (const k of ['bypassRU', 'sysProxy', 'checkIP', 'trayMode', 'localDNS']) body[k] = $(k).checked;
+      body.connectionMode = $('connectionMode').value;
+      body.theme = document.documentElement.dataset.theme || 'dark';
       await api('/api/settings', { method: 'POST', body });
       toast('Сохранено');
     };
   }
+  $('connectionMode').onchange = async () => {
+    const mode = $('connectionMode').value;
+    updateModeHint(mode);
+    const body = {};
+    for (const k of ['bypassRU', 'sysProxy', 'checkIP', 'trayMode', 'localDNS']) body[k] = $(k).checked;
+    body.connectionMode = mode;
+    body.theme = document.documentElement.dataset.theme || 'dark';
+    await api('/api/settings', { method: 'POST', body });
+    toast(mode === 'tun' ? 'TUN режим — нужно запустить от администратора' : 'Прокси режим сохранён');
+  };
 
   $('themeBtn').onclick = () => {
     const cur = document.documentElement.dataset.theme;
@@ -938,6 +953,16 @@ function wireVideoWallpaper() {
   if (savedName) {
     const status = $('videoStatus');
     if (status) status.textContent = '▶ ' + savedName + ' (перезагрузи файл)';
+  }
+}
+
+function updateModeHint(mode) {
+  const hint = $('modeHint');
+  if (!hint) return;
+  if (mode === 'tun') {
+    hint.textContent = 'TUN: ловит ВЕСЬ трафик системы через виртуальный адаптер wintun. Требует запуск от администратора. Браузеры, Telegram, игры — все идут через VPN.';
+  } else {
+    hint.textContent = 'Прокси: работает только с приложениями, которые уважают системный прокси (браузеры, Telegram).';
   }
 }
 

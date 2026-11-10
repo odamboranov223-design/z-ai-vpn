@@ -228,9 +228,11 @@ func (a *App) Connect(id string) error {
 
         settings := a.store.Settings()
         opts := xraycfg.Options{
-                SocksPort: SocksPort,
-                HTTPPort:  HTTPPort,
-                BypassRU:  settings.BypassRU,
+                SocksPort:      SocksPort,
+                HTTPPort:       HTTPPort,
+                BypassRU:       settings.BypassRU,
+                ConnectionMode: settings.ConnectionMode,
+                LocalDNS:       settings.LocalDNS,
         }
 
         var config []byte
@@ -250,7 +252,10 @@ func (a *App) Connect(id string) error {
                 return err
         }
 
-        if settings.SysProxy {
+        // System proxy is only enabled in proxy mode. In TUN mode the wintun
+        // adapter captures all traffic at the network layer, so the system proxy
+        // is left untouched.
+        if settings.ConnectionMode != "tun" && settings.SysProxy {
                 _ = sysproxy.Set(sysproxy.Proxy{Host: "127.0.0.1", Port: HTTPPort}, true)
         }
 
@@ -276,7 +281,9 @@ func (a *App) Disconnect() error {
         a.mu.Unlock()
 
         err := a.engine.Stop()
-        if a.store.Settings().SysProxy {
+        settings := a.store.Settings()
+        // Only restore the system proxy if we were the ones who set it (proxy mode).
+        if settings.ConnectionMode != "tun" && settings.SysProxy {
                 _ = sysproxy.Set(sysproxy.Proxy{Host: "127.0.0.1", Port: HTTPPort}, false)
         }
 
@@ -542,6 +549,10 @@ func (a *App) UpdateSettings(s store.Settings) {
                 if s.Theme != "" {
                         cur.Theme = s.Theme
                 }
+                if s.ConnectionMode == "proxy" || s.ConnectionMode == "tun" {
+                        cur.ConnectionMode = s.ConnectionMode
+                }
+                cur.LocalDNS = s.LocalDNS
         })
 }
 
