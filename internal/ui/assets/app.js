@@ -378,8 +378,10 @@ function renderSettings() {
   $('checkIP').checked = !!st.checkIP;
   $('trayMode').checked = !!st.trayMode;
   $('localDNS').checked = !!st.localDNS;
+  $('localDNSDrawer').checked = !!st.localDNS;
   $('connectionMode').value = st.connectionMode || 'proxy';
   updateModeHint(st.connectionMode || 'proxy');
+  updateModePill(st.connectionMode || 'proxy');
 
   const box = $('subList');
   box.textContent = '';
@@ -647,6 +649,9 @@ async function boot() {
 
   // ── animated background system ──
   wireBackgrounds();
+
+  // ── slide-out connection mode drawer ──
+  wireModeDrawer();
 
   $('modalCancel').onclick = closeModal;
   $('modal').onclick = (e) => { if (e.target === $('modal')) closeModal(); };
@@ -964,6 +969,117 @@ function updateModeHint(mode) {
   } else {
     hint.textContent = 'Прокси: работает только с приложениями, которые уважают системный прокси (браузеры, Telegram).';
   }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   MODE PILL + SLIDE-OUT DRAWER
+   The mode pill in the title bar opens a drawer with the connection
+   mode cards (Proxy / Xray TUN) and the Local DNS toggle, so the
+   user can switch modes without going into Settings.
+   ═══════════════════════════════════════════════════════════════ */
+function updateModePill(mode) {
+  const pill = $('modePill');
+  const text = $('modePillText');
+  if (!pill || !text) return;
+  pill.dataset.mode = mode;
+  text.textContent = mode === 'tun' ? 'TUN' : 'ПРОКСИ';
+  // mark active card in the drawer
+  for (const card of document.querySelectorAll('.mode-card')) {
+    card.classList.toggle('is-active', card.dataset.mode === mode);
+  }
+}
+
+function openModeDrawer() {
+  const d = $('modeDrawer');
+  if (!d) return;
+  d.hidden = false;
+  // force reflow before adding class so the transition runs
+  void d.offsetWidth;
+  d.classList.add('is-open');
+}
+
+function closeModeDrawer() {
+  const d = $('modeDrawer');
+  if (!d) return;
+  d.classList.remove('is-open');
+  setTimeout(() => { d.hidden = true; }, 350);
+}
+
+function wireModeDrawer() {
+  const pill = $('modePill');
+  if (pill) pill.onclick = openModeDrawer;
+
+  const close = $('modeDrawerClose');
+  if (close) close.onclick = closeModeDrawer;
+
+  const backdrop = $('modeDrawerBackdrop');
+  if (backdrop) backdrop.onclick = closeModeDrawer;
+
+  // mode cards
+  for (const card of document.querySelectorAll('.mode-card')) {
+    card.onclick = async () => {
+      const mode = card.dataset.mode;
+      updateModePill(mode);
+      updateModeHint(mode);
+      // sync the hidden settings dropdown too
+      const sel = $('connectionMode');
+      if (sel) sel.value = mode;
+      const body = {};
+      for (const k of ['bypassRU', 'sysProxy', 'checkIP', 'trayMode', 'localDNS']) {
+        body[k] = $(k) ? $(k).checked : false;
+      }
+      body.connectionMode = mode;
+      body.theme = document.documentElement.dataset.theme || 'dark';
+      try {
+        await api('/api/settings', { method: 'POST', body });
+        toast(mode === 'tun' ? 'TUN режим — нужен запуск от администратора' : 'Прокси режим сохранён');
+      } catch (e) {
+        toast('Ошибка: ' + e.message);
+      }
+    };
+  }
+
+  // Local DNS toggle inside drawer
+  const dnsDrawer = $('localDNSDrawer');
+  if (dnsDrawer) {
+    dnsDrawer.onchange = async () => {
+      const v = dnsDrawer.checked;
+      // sync hidden settings checkbox
+      const dnsSettings = $('localDNS');
+      if (dnsSettings) dnsSettings.checked = v;
+      const body = {};
+      for (const k of ['bypassRU', 'sysProxy', 'checkIP', 'trayMode', 'localDNS']) {
+        body[k] = $(k) ? $(k).checked : false;
+      }
+      body.connectionMode = $('connectionMode') ? $('connectionMode').value : 'proxy';
+      body.theme = document.documentElement.dataset.theme || 'dark';
+      try {
+        await api('/api/settings', { method: 'POST', body });
+        toast(v ? 'Локальный DNS включён' : 'Локальный DNS выключен');
+      } catch (e) {
+        toast('Ошибка: ' + e.message);
+      }
+    };
+  }
+
+  // "Open full settings" button → switch to settings view + close drawer
+  const openFull = $('openFullSettings');
+  if (openFull) {
+    openFull.onclick = () => {
+      closeModeDrawer();
+      // trigger settings tab
+      const settingsTab = document.querySelector('.tab[data-view="settings"]');
+      if (settingsTab) settingsTab.click();
+    };
+  }
+
+  // Esc closes the drawer
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      const d = $('modeDrawer');
+      if (d && !d.hidden) closeModeDrawer();
+    }
+  });
 }
 
 boot().catch((e) => {

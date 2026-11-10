@@ -31,6 +31,10 @@
       <span class="titlebar-name">Z AI VPN</span>
     </div>
     <div class="titlebar-tabs">
+      <button class="mode-pill" id="modePill" title="Сменить режим подключения">
+        <span class="mode-pill-dot"></span>
+        <span class="mode-pill-text" id="modePillText">ПРОКСИ</span>
+      </button>
       <span class="titlebar-tab" id="tbStatus">● OFFLINE</span>
     </div>
   </div>
@@ -379,6 +383,46 @@
     <p class="modal-error" id="modalError" hidden></p>
   </div>
 </div>
+
+<!-- ─────────── slide-out connection mode drawer ─────────── -->
+<aside class="mode-drawer" id="modeDrawer" hidden>
+  <div class="mode-drawer-backdrop" id="modeDrawerBackdrop"></div>
+  <div class="mode-drawer-panel">
+    <header class="mode-drawer-head">
+      <h3>Режим подключения</h3>
+      <button class="ghost-btn" id="modeDrawerClose" title="Закрыть">
+        <svg viewBox="0 0 24 24" class="ico small"><path d="M6 6l12 12 M18 6l-12 12"/></svg>
+      </button>
+    </header>
+
+    <div class="mode-drawer-body">
+      <button class="mode-card is-active" data-mode="proxy">
+        <div class="mode-card-head">
+          <span class="mode-card-name">Прокси</span>
+          <span class="mode-card-check">✓</span>
+        </div>
+        <p class="mode-card-desc">SOCKS+HTTP на 127.0.0.1. Системный прокси Windows. Только приложения, которые уважают системный прокси (браузеры, Telegram).</p>
+      </button>
+
+      <button class="mode-card" data-mode="tun">
+        <div class="mode-card-head">
+          <span class="mode-card-name">Xray TUN</span>
+          <span class="mode-card-warn">⚠ admin</span>
+        </div>
+        <p class="mode-card-desc">Виртуальный адаптер wintun. Ловит ВЕСЬ трафик системы — браузеры, игры, Telegram. Требует запуск от администратора.</p>
+      </button>
+
+      <label class="switch-row">
+        <span>Использовать локальный DNS</span>
+        <input type="checkbox" id="localDNSDrawer" class="switch"><i></i>
+      </label>
+    </div>
+
+    <footer class="mode-drawer-foot">
+      <button class="ghost-btn" id="openFullSettings">Полные настройки →</button>
+    </footer>
+  </div>
+</aside>
 
 <div class="toast" id="toast" hidden></div>
 
