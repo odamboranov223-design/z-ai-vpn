@@ -331,7 +331,13 @@ func streamSettings(spec *links.ServerSpec) (map[string]any, error) {
                         "fingerprint": firstNonEmpty(spec.TLS.UTLSFingerprint, "chrome"),
                         "publicKey":   spec.TLS.Reality.PublicKey,
                         "shortId":     spec.TLS.Reality.ShortID,
-                        "spiderX":     spec.TLS.Reality.SpiderX,
+                        "show":        false,
+                }
+                // spiderX must be a non-empty path starting with "/" — omit it
+                // entirely when empty so Xray-core doesn't reject the config
+                // with "Unable to load config injson".
+                if spec.TLS.Reality.SpiderX != "" {
+                        reality["spiderX"] = spec.TLS.Reality.SpiderX
                 }
                 stream["realitySettings"] = reality
         case spec.TLS.Enabled:
@@ -345,6 +351,12 @@ func streamSettings(spec *links.ServerSpec) (map[string]any, error) {
                 }
                 if len(spec.TLS.ALPN) > 0 {
                         tls["alpn"] = spec.TLS.ALPN
+                }
+                // pinnedPeerCertSha256 — Quattro and similar providers pass it as
+                // the pcs= URL parameter. Without it the TLS handshake fails cert
+                // validation, so include it whenever present.
+                if spec.TLS.PinnedPeerCertSha256 != "" {
+                        tls["pinnedPeerCertSha256"] = spec.TLS.PinnedPeerCertSha256
                 }
                 stream["tlsSettings"] = tls
         }
