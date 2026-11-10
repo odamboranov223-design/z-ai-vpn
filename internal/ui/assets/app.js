@@ -151,6 +151,14 @@ function applyStatus(s) {
   // make status text brighter when connected (was too faint)
   $('statusText').style.color = s.connected ? 'var(--fg-1)' : 'var(--fg-3)';
 
+  // title bar status badge
+  const tbStatus = $('tbStatus');
+  if (tbStatus) {
+    if (s.busy)      tbStatus.textContent = '● CONNECTING';
+    else if (s.connected) tbStatus.textContent = '● ONLINE · ' + (s.ip || '');
+    else             tbStatus.textContent = '● OFFLINE';
+  }
+
   // orb value
   let orbText = 'OFFLINE';
   if (s.busy) orbText = 'CONNECTING';
@@ -489,6 +497,12 @@ async function boot() {
   const savedTheme = localStorage.getItem('theme');
   if (savedTheme) document.documentElement.dataset.theme = savedTheme;
 
+  // ── custom title bar (frameless window) ──
+  wireTitleBar();
+
+  // ── animated background system ──
+  wireBackgrounds();
+
   $('modalCancel').onclick = closeModal;
   $('modal').onclick = (e) => { if (e.target === $('modal')) closeModal(); };
 
@@ -502,6 +516,218 @@ async function boot() {
   setInterval(refreshState, 2000);
   setInterval(tickSession, 1000);
   tickSession();
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   TITLE BAR — frameless window controls
+   The native Go side exposes windowMinimize / windowToggleMax /
+   windowClose / windowDrag to JS via WebView2 bindings.
+   In a regular browser these are undefined; we fall back to no-op.
+   ═══════════════════════════════════════════════════════════════ */
+function wireTitleBar() {
+  const call = (name) => {
+    if (typeof window[name] === 'function') {
+      try { window[name](); } catch (e) { /* ignore */ }
+    }
+  };
+
+  const tbMin = $('tbMin'); if (tbMin)   tbMin.onclick  = () => call('windowMinimize');
+  const tbMax = $('tbMax'); if (tbMax)   tbMax.onclick  = () => call('windowToggleMax');
+  const tbClose = $('tbClose'); if (tbClose) tbClose.onclick = () => call('windowClose');
+
+  // Drag: only when mousedown on the drag area itself (not on the buttons)
+  const drag = $('titlebarDrag');
+  if (drag) {
+    drag.addEventListener('mousedown', (e) => {
+      if (e.target.closest('.titlebar-tabs') || e.target.closest('.titlebar-brand')) {
+        // still allow drag from brand area but not from the status pill
+        if (e.target.closest('.titlebar-tab')) return;
+      }
+      if (e.button !== 0) return;
+      call('windowDrag');
+    });
+    // double-click toggles maximize
+    drag.addEventListener('dblclick', () => call('windowToggleMax'));
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   ANIMATED BACKGROUNDS
+   Aurora  — pure CSS radial gradients + drift animation
+   Grid    — pure CSS linear-gradient grid + mask + shift animation
+   Particles / Starfield — canvas-based, drawn every frame
+   ═══════════════════════════════════════════════════════════════ */
+const BG_KEY = 'z-ai-vpn-bg';
+const canvas = document.getElementById('bgCanvas');
+const ctx = canvas ? canvas.getContext('2d') : null;
+let bgMode = 'aurora';
+let bgRAF = null;
+let particles = [];
+let stars = [];
+
+function resizeCanvas() {
+  if (!canvas || !ctx) return;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width  = Math.floor(window.innerWidth * dpr);
+  canvas.height = Math.floor(window.innerHeight * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+function initParticles() {
+  particles = [];
+  const count = Math.min(120, Math.floor(window.innerWidth / 14));
+  for (let i = 0; i < count; i++) {
+    particles.push({
+      x: Math.random() * window.innerWidth,
+      y: Math.random() * window.innerHeight,
+      vx: (Math.random() - 0.5) * 0.4,
+      vy: (Math.random() - 0.5) * 0.4,
+      r: Math.random() * 2.2 + 0.6,
+      a: Math.random() * 0.5 + 0.3,
+    });
+  }
+}
+
+function initStars() {
+  stars = [];
+  const count = Math.min(260, Math.floor(window.innerWidth * window.innerHeight / 6000));
+  for (let i = 0; i < count; i++) {
+    stars.push({
+      x: Math.random() * window.innerWidth,
+      y: Math.random() * window.innerHeight,
+      r: Math.random() * 1.6 + 0.3,
+      tw: Math.random() * Math.PI * 2,
+      sp: Math.random() * 0.03 + 0.005,
+      base: Math.random() * 0.5 + 0.3,
+    });
+  }
+}
+
+function drawParticles() {
+  if (!ctx) return;
+  const W = window.innerWidth, H = window.innerHeight;
+  ctx.clearRect(0, 0, W, H);
+  // dots with glow
+  for (const p of particles) {
+    p.x += p.vx; p.y += p.vy;
+    if (p.x < 0) p.x = W; else if (p.x > W) p.x = 0;
+    if (p.y < 0) p.y = H; else if (p.y > H) p.y = 0;
+    // outer glow
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r * 2.5, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(255,255,255,${p.a * 0.15})`;
+    ctx.fill();
+    // core
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(255,255,255,${p.a})`;
+    ctx.fill();
+  }
+  // connecting lines — closer pairs only
+  for (let i = 0; i < particles.length; i++) {
+    for (let j = i + 1; j < particles.length; j++) {
+      const a = particles[i], b = particles[j];
+      const dx = a.x - b.x, dy = a.y - b.y;
+      const d2 = dx * dx + dy * dy;
+      if (d2 < 130 * 130) {
+        const alpha = (1 - Math.sqrt(d2) / 130) * 0.18;
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.strokeStyle = `rgba(255,255,255,${alpha})`;
+        ctx.lineWidth = 0.6;
+        ctx.stroke();
+      }
+    }
+  }
+}
+
+function drawStars() {
+  if (!ctx) return;
+  const W = window.innerWidth, H = window.innerHeight;
+  ctx.clearRect(0, 0, W, H);
+  for (const s of stars) {
+    s.tw += s.sp;
+    const alpha = s.base + Math.sin(s.tw) * 0.45;
+    const a = Math.max(0.05, Math.min(1, alpha));
+    // soft halo
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.r * 3, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(255,255,255,${a * 0.08})`;
+    ctx.fill();
+    // core
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(255,255,255,${a})`;
+    ctx.fill();
+    // diffraction cross on brightest stars
+    if (s.r > 1.0 && a > 0.6) {
+      ctx.strokeStyle = `rgba(255,255,255,${a * 0.5})`;
+      ctx.lineWidth = 0.6;
+      ctx.beginPath();
+      ctx.moveTo(s.x - 4, s.y); ctx.lineTo(s.x + 4, s.y);
+      ctx.moveTo(s.x, s.y - 4); ctx.lineTo(s.x, s.y + 4);
+      ctx.stroke();
+    }
+  }
+}
+
+function bgLoop() {
+  if (bgMode === 'particles')      drawParticles();
+  else if (bgMode === 'starfield') drawStars();
+  else { bgRAF = null; return; }   // nothing to animate, stop loop
+  bgRAF = requestAnimationFrame(bgLoop);
+}
+
+function setBackground(mode) {
+  bgMode = mode;
+  document.body.dataset.bg = mode;
+  localStorage.setItem(BG_KEY, mode);
+
+  // mark active button
+  for (const btn of document.querySelectorAll('.bg-opt')) {
+    btn.classList.toggle('is-active', btn.dataset.bg === mode);
+  }
+
+  // (re)init canvas particles / stars
+  if (canvas) {
+    resizeCanvas();
+    if (mode === 'particles') { initParticles(); }
+    else if (mode === 'starfield') { initStars(); }
+  }
+
+  // start or stop the loop
+  if (bgRAF) { cancelAnimationFrame(bgRAF); bgRAF = null; }
+  if (mode === 'particles' || mode === 'starfield') {
+    bgRAF = requestAnimationFrame(bgLoop);
+  }
+}
+
+function wireBackgrounds() {
+  // expose setBackground globally so the devtools / Playwright can call it
+  window.setBackground = setBackground;
+
+  // restore saved choice (default: aurora)
+  const saved = localStorage.getItem(BG_KEY) || 'aurora';
+  setBackground(saved);
+
+  // option buttons
+  for (const btn of document.querySelectorAll('.bg-opt')) {
+    btn.onclick = () => setBackground(btn.dataset.bg);
+  }
+
+  // resize handler — debounced
+  let resizeT;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeT);
+    resizeT = setTimeout(() => {
+      if (canvas) {
+        resizeCanvas();
+        if (bgMode === 'particles') initParticles();
+        else if (bgMode === 'starfield') initStars();
+      }
+    }, 150);
+  });
 }
 
 boot().catch((e) => {

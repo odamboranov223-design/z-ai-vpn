@@ -37,7 +37,7 @@ jobs:
       - name: Build
         run: >-
           go build -trimpath
-          -ldflags "-s -w -X github.com/odamboranov223-design/z-ai-vpn/internal/ui.Version=${{ github.ref_name }}"
+          -ldflags "-s -w -H windowsgui -X github.com/odamboranov223-design/z-ai-vpn/internal/ui.Version=${{ github.ref_name }}"
           -o ZAIVPN.exe ./cmd/z-ai-vpn
       - name: Smoke test the binary
         run: .\ZAIVPN.exe -version

@@ -8,11 +8,43 @@
 </head>
 <body>
 
+<!-- ═══ animated background layers ═══ -->
+<div class="bg-layer" id="bgLayer">
+  <canvas id="bgCanvas" class="bg-canvas"></canvas>
+  <div class="bg-aurora" id="bgAurora"></div>
+  <div class="bg-grid" id="bgGrid"></div>
+  <div class="bg-vignette"></div>
+</div>
+
 <!-- subtle noise overlay for premium texture -->
 <svg class="noise" xmlns="http://www.w3.org/2000/svg">
   <filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.06 0"/></filter>
   <rect width="100%" height="100%" filter="url(#n)"/>
 </svg>
+
+<!-- ═══ custom title bar (frameless window) ═══ -->
+<header class="titlebar" id="titlebar">
+  <div class="titlebar-drag" id="titlebarDrag">
+    <div class="titlebar-brand">
+      <div class="titlebar-mark">Z</div>
+      <span class="titlebar-name">Z AI VPN</span>
+    </div>
+    <div class="titlebar-tabs">
+      <span class="titlebar-tab" id="tbStatus">● OFFLINE</span>
+    </div>
+  </div>
+  <div class="titlebar-controls">
+    <button class="tb-btn" id="tbMin" title="Свернуть" aria-label="Свернуть">
+      <svg viewBox="0 0 12 12"><path d="M2 6 h8"/></svg>
+    </button>
+    <button class="tb-btn" id="tbMax" title="Развернуть" aria-label="Развернуть">
+      <svg viewBox="0 0 12 12"><rect x="2.5" y="2.5" width="7" height="7" rx="1"/></svg>
+    </button>
+    <button class="tb-btn tb-close" id="tbClose" title="Закрыть" aria-label="Закрыть">
+      <svg viewBox="0 0 12 12"><path d="M3 3 l6 6 M9 3 l-6 6"/></svg>
+    </button>
+  </div>
+</header>
 
 <div id="app">
 
@@ -27,6 +59,7 @@
     </div>
 
     <div class="rail-divider"></div>
+
 
     <!-- power dial — morphing circular toggle -->
     <button id="power" class="power" title="Подключить / отключить" aria-label="Подключить или отключить">
@@ -221,6 +254,33 @@
           <span>Запускать свёрнутым в трей</span>
           <input type="checkbox" id="trayMode" class="switch"><i></i>
         </label>
+      </div>
+
+      <div class="panel">
+        <h4>Обои</h4>
+        <p class="muted small">Анимированный фон за интерфейсом.</p>
+        <div class="bg-grid-options" id="bgOptions">
+          <button class="bg-opt is-active" data-bg="aurora">
+            <span class="bg-opt-preview bg-opt-aurora"></span>
+            <span class="bg-opt-name">Aurora</span>
+          </button>
+          <button class="bg-opt" data-bg="particles">
+            <span class="bg-opt-preview bg-opt-particles"></span>
+            <span class="bg-opt-name">Particles</span>
+          </button>
+          <button class="bg-opt" data-bg="grid">
+            <span class="bg-opt-preview bg-opt-grid"></span>
+            <span class="bg-opt-name">Grid</span>
+          </button>
+          <button class="bg-opt" data-bg="starfield">
+            <span class="bg-opt-preview bg-opt-starfield"></span>
+            <span class="bg-opt-name">Starfield</span>
+          </button>
+          <button class="bg-opt" data-bg="off">
+            <span class="bg-opt-preview bg-opt-off"></span>
+            <span class="bg-opt-name">Off</span>
+          </button>
+        </div>
       </div>
 
       <div class="panel">
