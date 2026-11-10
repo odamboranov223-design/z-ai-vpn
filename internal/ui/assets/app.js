@@ -100,10 +100,16 @@ function isRussianServer(s) {
 
 // Ping → bar class
 function pingClass(p) {
-  if (p === null || p === undefined) return '';
+  if (!p || p <= 0) return '';
   if (p < 150) return 'good';
   if (p < 400) return 'mid';
   return 'bad';
+}
+
+// Format ping for display — 0 and negative mean "no ping" / "unreachable".
+function fmtPing(p) {
+  if (p === null || p === undefined || p <= 0) return '—';
+  return p + 'ms';
 }
 
 const state = {
@@ -281,8 +287,7 @@ function renderList() {
     item.appendChild(pb);
 
     // ping number
-    const pn = el('div', 'ping-num',
-      (s.ping === null || s.ping === undefined) ? '—' : (s.ping + 'ms'));
+    const pn = el('div', 'ping-num', fmtPing(s.ping));
     item.appendChild(pn);
 
     box.appendChild(item);
@@ -296,7 +301,7 @@ function renderList() {
 function top3Servers() {
   return state.servers
     .filter((s) => !isRussianServer(s))
-    .filter((s) => s.ping !== null && s.ping !== undefined)
+    .filter((s) => s.ping !== null && s.ping !== undefined && s.ping > 0)
     .sort((a, b) => a.ping - b.ping)
     .slice(0, 3);
 }
@@ -352,7 +357,7 @@ function renderDetail() {
   $('dTraffic').textContent = s.traffic || '—';
   $('dExpiry').textContent = s.expiry || '—';
 
-  $('dPing').textContent = (s.ping === null || s.ping === undefined) ? 'не измерен' : (s.ping + ' ms');
+  $('dPing').textContent = fmtPing(s.ping);
 
   $('apiPanel').hidden = false;
 
@@ -461,6 +466,51 @@ async function pingAll() {
   }, 'Пингуем…');
 }
 
+// Ping every server sequentially. Backend already processes one at a time
+// (pingAll loop with 80ms gap). Frontend polls /api/servers every 1.5s for
+// up to 60s so the list updates live as each ping lands.
+let pingAllPollTimer = null;
+async function pingAllServersSequentially() {
+  if (state.busy) {
+    toast('Подожди — уже идёт операция');
+    return;
+  }
+  const total = state.servers.length;
+  if (total === 0) {
+    toast('Нет серверов для пинга');
+    return;
+  }
+  toast(`Пингую ${total} серверов по очереди…`);
+
+  // Start the backend pingAll (empty body triggers it).
+  try {
+    await api('/api/ping', { method: 'POST', body: {} });
+  } catch (e) {
+    toast('Ошибка: ' + e.message);
+    return;
+  }
+
+  // Highlight the button while polling.
+  const btn = $('pingAllBtn');
+  if (btn) btn.classList.add('is-pinging');
+
+  // Poll servers every 1.5s for up to 90s.
+  let elapsed = 0;
+  if (pingAllPollTimer) clearInterval(pingAllPollTimer);
+  pingAllPollTimer = setInterval(async () => {
+    elapsed += 1500;
+    try { await refreshServers(); } catch (_) {}
+    // Stop when we estimate all pings are done (~1s per server + buffer)
+    // or after 90s.
+    if (elapsed > Math.min(90000, total * 1100 + 5000)) {
+      clearInterval(pingAllPollTimer);
+      pingAllPollTimer = null;
+      if (btn) btn.classList.remove('is-pinging');
+      toast('Пинг завершён');
+    }
+  }, 1500);
+}
+
 /* ─────────────────────────── modal ─────────────────────────── */
 function openModal(title, hint, placeholder, onOk) {
   $('modalTitle').textContent = title;
@@ -503,6 +553,7 @@ async function boot() {
   $('power').onclick = togglePower;
   $('connectBtn').onclick = togglePower;
   $('pingBtn').onclick = pingAll;
+  $('pingAllBtn').onclick = pingAllServersSequentially;
   $('refreshBtn').onclick = () => guard(async () => {
     await api('/api/subscriptions/refresh', { method: 'POST' });
     await refreshServers();
@@ -527,9 +578,9 @@ async function boot() {
   }
 
   $('addBtn').onclick = () => openModal(
-    'Добавить сервер',
-    'Вставь одну ссылку или несколько, каждую с новой строки.',
-    'vless://…',
+    'Добавить сервер или подписку',
+    'Вставь ссылку на подписку (https://…) ИЛИ share-link (vless://…, vmess://…). Каждый вид с новой строки.',
+    'https://… или vless://…',
     async (text) => {
       const r = await api('/api/servers/add', { method: 'POST', body: { text } });
       await refreshServers();

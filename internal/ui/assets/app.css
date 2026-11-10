@@ -488,6 +488,12 @@ body.is-busy .dot {
   color: var(--fg);
   border-color: var(--line-3);
 }
+.icon-btn.is-pinging {
+  background: var(--fg);
+  color: var(--bg);
+  border-color: var(--fg);
+  animation: pulse 1.1s infinite;
+}
 
 /* ═══════════════════════════════════════════════════════════════
    LIST PANE
