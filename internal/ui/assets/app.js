@@ -148,6 +148,9 @@ function applyStatus(s) {
   $('statusText').textContent = text;
   $('powerLabel').textContent = s.busy ? '…' : (s.connected ? 'ON' : 'OFF');
 
+  // make status text brighter when connected (was too faint)
+  $('statusText').style.color = s.connected ? 'var(--fg-1)' : 'var(--fg-3)';
+
   // orb value
   let orbText = 'OFFLINE';
   if (s.busy) orbText = 'CONNECTING';
