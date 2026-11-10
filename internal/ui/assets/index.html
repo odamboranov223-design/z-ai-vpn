@@ -10,6 +10,7 @@
 
 <!-- ═══ animated background layers ═══ -->
 <div class="bg-layer" id="bgLayer">
+  <video id="bgVideo" class="bg-video" muted loop autoplay playsinline></video>
   <canvas id="bgCanvas" class="bg-canvas"></canvas>
   <div class="bg-aurora" id="bgAurora"></div>
   <div class="bg-grid" id="bgGrid"></div>
@@ -127,6 +128,14 @@
       </button>
     </div>
 
+    <div class="top3-wrap" id="top3Wrap" hidden>
+      <div class="top3-header">
+        <span class="top3-title">⚡ ТОП-3 ПО ПИНГУ</span>
+        <span class="top3-hint muted small">без 🇷🇺</span>
+      </div>
+      <div class="top3-list" id="top3List"></div>
+    </div>
+
     <div class="server-list" id="serverList"></div>
 
     <div class="empty" id="emptyState" hidden>
@@ -156,7 +165,10 @@
     <div class="detail" id="detail" hidden>
 
       <header class="detail-head">
-        <div class="hero-country" id="heroCountry">—</div>
+        <div class="hero-country" id="heroCountry">
+          <span class="hero-flag-emoji" id="heroFlag">🏳️</span>
+          <span class="hero-country-code" id="heroCountryCode">—</span>
+        </div>
         <div class="hero-meta">
           <h2 id="dName">—</h2>
           <p class="muted" id="dCountry">—</p>
@@ -274,13 +286,23 @@
           </button>
           <button class="bg-opt" data-bg="starfield">
             <span class="bg-opt-preview bg-opt-starfield"></span>
-            <span class="bg-opt-name">Starfield</span>
+            <span class="bg-opt-name">Stars</span>
           </button>
           <button class="bg-opt" data-bg="off">
             <span class="bg-opt-preview bg-opt-off"></span>
             <span class="bg-opt-name">Off</span>
           </button>
         </div>
+
+        <div class="video-wallpaper-row">
+          <label class="primary-btn" for="videoFileInput">
+            <svg viewBox="0 0 24 24" class="ico small"><path d="M4 4h16v16H4z M4 15l4-4 4 4 4-4 4 4"/></svg>
+            <span>Загрузить видео / GIF</span>
+          </label>
+          <input type="file" id="videoFileInput" accept="video/*,image/gif" hidden>
+          <button class="ghost-btn" id="videoClearBtn" title="Убрать видео">✕</button>
+        </div>
+        <p class="muted small video-status" id="videoStatus">Видео не выбрано</p>
       </div>
 
       <div class="panel">

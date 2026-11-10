@@ -75,6 +75,29 @@ function countryCode(name) {
   return name.slice(0, 2).toUpperCase();
 }
 
+// Convert a 2-letter country code to a flag emoji using regional indicator
+// symbols. Returns the white flag for unknown codes.
+function countryFlag(cc) {
+  if (!cc || cc === '—' || cc.length !== 2) return '🏳️';
+  const A = 0x1F1E6; // regional indicator A
+  const up = cc.toUpperCase();
+  const ch1 = up.charCodeAt(0);
+  const ch2 = up.charCodeAt(1);
+  if (ch1 < 65 || ch1 > 90 || ch2 < 65 || ch2 > 90) return '🏳️';
+  return String.fromCodePoint(A + (ch1 - 65), A + (ch2 - 65));
+}
+
+// Detect Russian servers — excluded from Top 3.
+function isRussianServer(s) {
+  if (!s) return false;
+  const cc = countryCode(s.country);
+  if (cc === 'RU') return true;
+  const c = (s.country || '').toLowerCase();
+  if (c.includes('росс') || c.includes('russ')) return true;
+  if (s.address && s.address.toLowerCase().endsWith('.ru')) return true;
+  return false;
+}
+
 // Ping → bar class
 function pingClass(p) {
   if (p === null || p === undefined) return '';
@@ -151,12 +174,20 @@ function applyStatus(s) {
   // make status text brighter when connected (was too faint)
   $('statusText').style.color = s.connected ? 'var(--fg-1)' : 'var(--fg-3)';
 
-  // title bar status badge
+  // title bar status badge — with flag of connected country
   const tbStatus = $('tbStatus');
   if (tbStatus) {
-    if (s.busy)      tbStatus.textContent = '● CONNECTING';
-    else if (s.connected) tbStatus.textContent = '● ONLINE · ' + (s.ip || '');
-    else             tbStatus.textContent = '● OFFLINE';
+    if (s.busy) {
+      tbStatus.textContent = '● CONNECTING';
+    } else if (s.connected) {
+      const cur = s.current || {};
+      const cc = countryCode(cur.country);
+      const flag = countryFlag(cc);
+      const ip = s.ip ? ' · ' + s.ip : '';
+      tbStatus.textContent = flag + ' ONLINE' + ip;
+    } else {
+      tbStatus.textContent = '● OFFLINE';
+    }
   }
 
   // orb value
@@ -228,9 +259,13 @@ function renderList() {
     const item = el('div', cls);
     item.onclick = () => { state.selected = s.id; renderList(); renderDetail(); };
 
-    // country code badge
+    // country flag + code badge
     const cc = countryCode(s.country);
-    item.appendChild(el('div', 'flag-cc', cc));
+    const flag = countryFlag(cc);
+    const ccWrap = el('div', 'flag-cc');
+    ccWrap.appendChild(el('span', 'flag-emoji', flag));
+    ccWrap.appendChild(el('span', 'flag-text', cc));
+    item.appendChild(ccWrap);
 
     const meta = el('div', 'meta');
     meta.appendChild(el('div', 'name', s.name));
@@ -252,6 +287,46 @@ function renderList() {
 
     box.appendChild(item);
   }
+
+  // also refresh top-3 widget
+  renderTop3();
+}
+
+/* ─────────────────────────── top-3 by ping (excluding RU) ─────────────────────────── */
+function top3Servers() {
+  return state.servers
+    .filter((s) => !isRussianServer(s))
+    .filter((s) => s.ping !== null && s.ping !== undefined)
+    .sort((a, b) => a.ping - b.ping)
+    .slice(0, 3);
+}
+
+function renderTop3() {
+  const top = top3Servers();
+  const wrap = $('top3Wrap');
+  const list = $('top3List');
+  if (!wrap || !list) return;
+
+  if (top.length === 0) {
+    wrap.hidden = true;
+    return;
+  }
+  wrap.hidden = false;
+  list.textContent = '';
+  top.forEach((s, i) => {
+    const cc = countryCode(s.country);
+    const item = el('div', 'top3-item');
+    item.onclick = () => {
+      state.selected = s.id;
+      renderList();
+      renderDetail();
+    };
+    item.appendChild(el('span', 'top3-rank', String(i + 1)));
+    item.appendChild(el('span', 'top3-flag', countryFlag(cc)));
+    item.appendChild(el('span', 'top3-name', s.name));
+    item.appendChild(el('span', 'top3-ping', s.ping + 'ms'));
+    list.appendChild(item);
+  });
 }
 
 /* ─────────────────────────── detail ─────────────────────────── */
@@ -263,7 +338,11 @@ function renderDetail() {
 
   $('dName').textContent = s.name || s.address || '—';
   $('dCountry').textContent = [s.country, s.subName].filter(Boolean).join(' · ') || '—';
-  $('heroCountry').textContent = countryCode(s.country);
+
+  // hero flag + code
+  const cc = countryCode(s.country);
+  $('heroFlag').textContent = countryFlag(cc);
+  $('heroCountryCode').textContent = cc;
 
   $('dProto').textContent = s.protocol || '—';
   $('dTransport').textContent = s.transport || '—';
@@ -516,6 +595,22 @@ async function boot() {
   setInterval(refreshState, 2000);
   setInterval(tickSession, 1000);
   tickSession();
+
+  // Auto-ping all servers every 45s, then refresh the list after 6s
+  // so the Top-3 widget and ping bars stay current.
+  setInterval(async () => {
+    if (state.busy) return;
+    try {
+      await api('/api/ping', { method: 'POST', body: {} });
+      setTimeout(refreshServers, 6000);
+    } catch (_) {}
+  }, 45000);
+
+  // initial auto-ping 3s after boot (lets the list settle)
+  setTimeout(async () => {
+    try { await api('/api/ping', { method: 'POST', body: {} }); } catch (_) {}
+    setTimeout(refreshServers, 6000);
+  }, 3000);
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -713,8 +808,15 @@ function wireBackgrounds() {
 
   // option buttons
   for (const btn of document.querySelectorAll('.bg-opt')) {
-    btn.onclick = () => setBackground(btn.dataset.bg);
+    btn.onclick = () => {
+      // clear any active video first
+      clearVideoWallpaper();
+      setBackground(btn.dataset.bg);
+    };
   }
+
+  // ── video / GIF wallpaper picker ──
+  wireVideoWallpaper();
 
   // resize handler — debounced
   let resizeT;
@@ -728,6 +830,64 @@ function wireBackgrounds() {
       }
     }, 150);
   });
+}
+
+/* ─────────────────────────── video wallpaper ─────────────────────────── */
+const VIDEO_KEY = 'z-ai-vpn-video-name';
+let videoObjectURL = null;
+
+function clearVideoWallpaper() {
+  const video = document.getElementById('bgVideo');
+  if (!video) return;
+  video.pause();
+  video.removeAttribute('src');
+  video.load();
+  if (videoObjectURL) {
+    URL.revokeObjectURL(videoObjectURL);
+    videoObjectURL = null;
+  }
+  localStorage.removeItem(VIDEO_KEY);
+  const status = $('videoStatus');
+  if (status) status.textContent = 'Видео не выбрано';
+  // restore to previous animated bg if currently video
+  if (document.body.dataset.bg === 'video') {
+    const fallback = localStorage.getItem(BG_KEY) || 'aurora';
+    setBackground(fallback);
+  }
+}
+
+function setVideoWallpaper(file) {
+  const video = document.getElementById('bgVideo');
+  if (!video || !file) return;
+  if (videoObjectURL) URL.revokeObjectURL(videoObjectURL);
+  videoObjectURL = URL.createObjectURL(file);
+  video.src = videoObjectURL;
+  video.play().catch(() => {});
+  document.body.dataset.bg = 'video';
+  localStorage.setItem(VIDEO_KEY, file.name);
+  const status = $('videoStatus');
+  if (status) status.textContent = '▶ ' + file.name;
+}
+
+function wireVideoWallpaper() {
+  const input = document.getElementById('videoFileInput');
+  const clearBtn = document.getElementById('videoClearBtn');
+  if (input) {
+    input.onchange = (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (file) setVideoWallpaper(file);
+      e.target.value = ''; // allow re-picking the same file
+    };
+  }
+  if (clearBtn) {
+    clearBtn.onclick = clearVideoWallpaper;
+  }
+  // restore label if there's a saved name (file itself has to be re-picked)
+  const savedName = localStorage.getItem(VIDEO_KEY);
+  if (savedName) {
+    const status = $('videoStatus');
+    if (status) status.textContent = '▶ ' + savedName + ' (перезагрузи файл)';
+  }
 }
 
 boot().catch((e) => {
